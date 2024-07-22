@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/starry/WebServer/IO\u590d\u7528\u5e76\u53d1\u6a21\u578b/\u5355\u7ebf\u7a0b\u591a\u8defIO\u590d\u7528+\u591a\u7ebf\u7a0b\u4e1a\u52a1\u5de5\u4f5c\u6c60/\u4ee3\u7801/Server/build/_deps/googletest-subbuild/CMakeFiles/googletest-populate"
+		},
+		{
+			"file" : "/home/starry/WebServer/IO\u590d\u7528\u5e76\u53d1\u6a21\u578b/\u5355\u7ebf\u7a0b\u591a\u8defIO\u590d\u7528+\u591a\u7ebf\u7a0b\u4e1a\u52a1\u5de5\u4f5c\u6c60/\u4ee3\u7801/Server/build/_deps/googletest-subbuild/CMakeFiles/googletest-populate.rule"
+		},
+		{
+			"file" : "/home/starry/WebServer/IO\u590d\u7528\u5e76\u53d1\u6a21\u578b/\u5355\u7ebf\u7a0b\u591a\u8defIO\u590d\u7528+\u591a\u7ebf\u7a0b\u4e1a\u52a1\u5de5\u4f5c\u6c60/\u4ee3\u7801/Server/build/_deps/googletest-subbuild/CMakeFiles/googletest-populate-complete.rule"
+		},
+		{
+			"file" : "/home/starry/WebServer/IO\u590d\u7528\u5e76\u53d1\u6a21\u578b/\u5355\u7ebf\u7a0b\u591a\u8defIO\u590d\u7528+\u591a\u7ebf\u7a0b\u4e1a\u52a1\u5de5\u4f5c\u6c60/\u4ee3\u7801/Server/build/_deps/googletest-subbuild/googletest-populate-prefix/src/googletest-populate-stamp/googletest-populate-build.rule"
+		},
+		{
+			"file" : "/home/starry/WebServer/IO\u590d\u7528\u5e76\u53d1\u6a21\u578b/\u5355\u7ebf\u7a0b\u591a\u8defIO\u590d\u7528+\u591a\u7ebf\u7a0b\u4e1a\u52a1\u5de5\u4f5c\u6c60/\u4ee3\u7801/Server/build/_deps/googletest-subbuild/googletest-populate-prefix/src/googletest-populate-stamp/googletest-populate-configure.rule"
+		},
+		{
+			"file" : "/home/starry/WebServer/IO\u590d\u7528\u5e76\u53d1\u6a21\u578b/\u5355\u7ebf\u7a0b\u591a\u8defIO\u590d\u7528+\u591a\u7ebf\u7a0b\u4e1a\u52a1\u5de5\u4f5c\u6c60/\u4ee3\u7801/Server/build/_deps/googletest-subbuild/googletest-populate-prefix/src/googletest-populate-stamp/googletest-populate-download.rule"
+		},
+		{
+			"file" : "/home/starry/WebServer/IO\u590d\u7528\u5e76\u53d1\u6a21\u578b/\u5355\u7ebf\u7a0b\u591a\u8defIO\u590d\u7528+\u591a\u7ebf\u7a0b\u4e1a\u52a1\u5de5\u4f5c\u6c60/\u4ee3\u7801/Server/build/_deps/googletest-subbuild/googletest-populate-prefix/src/googletest-populate-stamp/googletest-populate-install.rule"
+		},
+		{
+			"file" : "/home/starry/WebServer/IO\u590d\u7528\u5e76\u53d1\u6a21\u578b/\u5355\u7ebf\u7a0b\u591a\u8defIO\u590d\u7528+\u591a\u7ebf\u7a0b\u4e1a\u52a1\u5de5\u4f5c\u6c60/\u4ee3\u7801/Server/build/_deps/googletest-subbuild/googletest-populate-prefix/src/googletest-populate-stamp/googletest-populate-mkdir.rule"
+		},
+		{
+			"file" : "/home/starry/WebServer/IO\u590d\u7528\u5e76\u53d1\u6a21\u578b/\u5355\u7ebf\u7a0b\u591a\u8defIO\u590d\u7528+\u591a\u7ebf\u7a0b\u4e1a\u52a1\u5de5\u4f5c\u6c60/\u4ee3\u7801/Server/build/_deps/googletest-subbuild/googletest-populate-prefix/src/googletest-populate-stamp/googletest-populate-patch.rule"
+		},
+		{
+			"file" : "/home/starry/WebServer/IO\u590d\u7528\u5e76\u53d1\u6a21\u578b/\u5355\u7ebf\u7a0b\u591a\u8defIO\u590d\u7528+\u591a\u7ebf\u7a0b\u4e1a\u52a1\u5de5\u4f5c\u6c60/\u4ee3\u7801/Server/build/_deps/googletest-subbuild/googletest-populate-prefix/src/googletest-populate-stamp/googletest-populate-test.rule"
+		},
+		{
+			"file" : "/home/starry/WebServer/IO\u590d\u7528\u5e76\u53d1\u6a21\u578b/\u5355\u7ebf\u7a0b\u591a\u8defIO\u590d\u7528+\u591a\u7ebf\u7a0b\u4e1a\u52a1\u5de5\u4f5c\u6c60/\u4ee3\u7801/Server/build/_deps/googletest-subbuild/googletest-populate-prefix/src/googletest-populate-stamp/googletest-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"googletest-populate"
+		],
+		"name" : "googletest-populate"
+	}
+}

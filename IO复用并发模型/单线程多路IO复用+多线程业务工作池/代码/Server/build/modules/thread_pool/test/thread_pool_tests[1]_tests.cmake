@@ -1,0 +1,7 @@
+add_test( ThreadPoolTest.TaskExecution [==[/home/starry/WebServer/IO复用并发模型/单线程多路IO复用+多线程业务工作池/代码/Server/build/bin/thread_pool_tests]==] [==[--gtest_filter=ThreadPoolTest.TaskExecution]==] --gtest_also_run_disabled_tests)
+set_tests_properties( ThreadPoolTest.TaskExecution PROPERTIES WORKING_DIRECTORY [==[/home/starry/WebServer/IO复用并发模型/单线程多路IO复用+多线程业务工作池/代码/Server/build/modules/thread_pool/test]==] SKIP_REGULAR_EXPRESSION [==[\[  SKIPPED \]]==])
+add_test( ThreadPoolTest.ExceptionHandling [==[/home/starry/WebServer/IO复用并发模型/单线程多路IO复用+多线程业务工作池/代码/Server/build/bin/thread_pool_tests]==] [==[--gtest_filter=ThreadPoolTest.ExceptionHandling]==] --gtest_also_run_disabled_tests)
+set_tests_properties( ThreadPoolTest.ExceptionHandling PROPERTIES WORKING_DIRECTORY [==[/home/starry/WebServer/IO复用并发模型/单线程多路IO复用+多线程业务工作池/代码/Server/build/modules/thread_pool/test]==] SKIP_REGULAR_EXPRESSION [==[\[  SKIPPED \]]==])
+add_test( ThreadPoolTest.ConcurrencyPerformance [==[/home/starry/WebServer/IO复用并发模型/单线程多路IO复用+多线程业务工作池/代码/Server/build/bin/thread_pool_tests]==] [==[--gtest_filter=ThreadPoolTest.ConcurrencyPerformance]==] --gtest_also_run_disabled_tests)
+set_tests_properties( ThreadPoolTest.ConcurrencyPerformance PROPERTIES WORKING_DIRECTORY [==[/home/starry/WebServer/IO复用并发模型/单线程多路IO复用+多线程业务工作池/代码/Server/build/modules/thread_pool/test]==] SKIP_REGULAR_EXPRESSION [==[\[  SKIPPED \]]==])
+set( thread_pool_tests_TESTS ThreadPoolTest.TaskExecution ThreadPoolTest.ExceptionHandling ThreadPoolTest.ConcurrencyPerformance)

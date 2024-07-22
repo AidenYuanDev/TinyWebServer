@@ -1,0 +1,1 @@
+/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/Server.dir/main.cpp.o -o ../bin/Server  ../lib/libthread_pool.a 
