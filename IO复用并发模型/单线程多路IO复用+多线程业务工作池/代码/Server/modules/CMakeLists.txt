@@ -1,6 +1,8 @@
 # 列出所有模块
 set(MODULES
     thread_pool
+    client_context
+    server
     # 添加其他模块...
 )
 

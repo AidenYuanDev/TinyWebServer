@@ -1,5 +1,0 @@
-if(EXISTS "/home/starry/WebServer/IO复用并发模型/单线程多路IO复用+多线程业务工作池/代码/Server/build/modules/thread_pool/test/thread_pool_tests[1]_tests.cmake")
-  include("/home/starry/WebServer/IO复用并发模型/单线程多路IO复用+多线程业务工作池/代码/Server/build/modules/thread_pool/test/thread_pool_tests[1]_tests.cmake")
-else()
-  add_test(thread_pool_tests_NOT_BUILT thread_pool_tests_NOT_BUILT)
-endif()

@@ -1,1 +1,0 @@
-/usr/bin/c++ -O3 -DNDEBUG CMakeFiles/thread_pool_tests.dir/thread_pool_test.cpp.o -o ../../../bin/thread_pool_tests  ../../../lib/libgtest_main.a ../../../lib/libthread_pool.a ../../../lib/libgtest.a 
