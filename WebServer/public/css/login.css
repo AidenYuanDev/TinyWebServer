@@ -1,0 +1,87 @@
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: linear-gradient(#141e30, #243b55);
+}
+
+.login {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 400px;
+    padding: 40px;
+    background-color: rgb(0, 0, 0, 0.2);
+    box-shadow: 0 15px 25px rgb(0, 0, 0, 0.4);
+
+}
+
+.login h2 {
+    color: #fff;
+    margin-bottom: 30px;
+}
+
+.login .login_box {
+    position: relative;
+    width: 100%;
+}
+
+.login .login_box input {
+    outline: none;
+    width: 100%;
+    padding: 10px 0;
+    margin-bottom: 30px;
+    color: #fff;
+    font-size: 16px;
+    border-bottom: 1px solid #fff;
+    background-color: transparent;
+}
+
+.login .login_box label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    padding: 10px 0;
+    color: #fff;
+    pointer-events: none;
+}
+
+.login .login_box input:focus+label,
+.login .login_box input:valid+label {
+    top: -20px;
+    color: #03e9f4;
+    font-size: 12px;
+}
+
+.login a {
+    position: relative;
+    padding: 10px 20px;
+    color: #03e9f4;
+    transition: all 0.5s;
+}
+
+.login a:hover {
+    color: #fff;
+    border-radius: 5px;
+    border-color: #03e9f4;
+    box-shadow: 0 0 5px #03e9f4, 0 0 25px #03e9f4, 0 0 50px #03e9f4, 0 0 100px;
+}
+
+.password-icon1 {
+    position: absolute;
+    top: 165px;
+    right: 27px;
+    font-size: 30px;
+    /* display: none; */
+    /* display: block; */
+}
+
+.password-icon2 {
+    position: absolute;
+    top: 165px;
+    right: 27px;
+    font-size: 30px;
+    /* display: none; */
+}

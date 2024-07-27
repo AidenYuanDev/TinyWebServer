@@ -1,0 +1,116 @@
+body {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    background: linear-gradient(#141e30, #243b55);
+}
+
+.Register {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 400px;
+    padding: 40px;
+    background-color: rgb(0, 0, 0, 0.2);
+    box-shadow: 0 15px 25px rgb(0, 0, 0, 0.4);
+
+}
+
+.Register h2 {
+    color: #fff;
+    margin-bottom: 30px;
+}
+
+.Register .Register_box {
+    position: relative;
+    width: 100%;
+}
+
+.Register .Register_box input {
+    outline: none;
+    width: 100%;
+    padding: 10px 0;
+    margin-bottom: 30px;
+    color: #fff;
+    font-size: 16px;
+    border-bottom: 1px solid #fff;
+    background-color: transparent;
+}
+
+.Register .Register_box label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    padding: 10px 0;
+    color: #fff;
+    pointer-events: none;
+}
+
+.Register .Register_box input:focus+label,
+.Register .Register_box input:valid+label {
+    top: -20px;
+    color: #03e9f4;
+    font-size: 12px;
+}
+
+.Register a {
+    position: relative;
+    padding: 10px 20px;
+    color: #03e9f4;
+    transition: all 0.5s;
+}
+
+.Register a:hover {
+    color: #fff;
+    border-radius: 5px;
+    border-color: #03e9f4;
+    box-shadow: 0 0 5px #03e9f4, 0 0 25px #03e9f4, 0 0 50px #03e9f4, 0 0 100px;
+}
+
+.Register a span {
+    position: absolute;
+
+}
+
+/* 密码 */
+.password-icon1 {
+    position: absolute;
+    top: 165px;
+    right: 27px;
+    font-size: 30px;
+    /* display: none; */
+    /* display: block; */
+}
+
+.password-icon2 {
+    position: absolute;
+    top: 165px;
+    right: 27px;
+    font-size: 30px;
+    /* display: none; */
+}
+
+.Register_box_send {
+    position: absolute;
+    right: -20px;
+    /* width: 50px; */
+    height: 35px;
+    /* border: 1px solid #fff; */
+    color: #03e9f4;
+    background-color: transparent;
+    /* opacity: 0; */
+    text-transform: uppercase;
+    transition: 0.5s;
+    letter-spacing: 4px;
+}
+
+.Register_box_send:hover {
+    background: #03e9f4;
+    color: #050801;
+    box-shadow: 0 0 5px #03e9f4,
+        0 0 25px #03e9f4,
+        0 0 50px #03e9f4,
+        0 0 200px #03e9f4;
+}
