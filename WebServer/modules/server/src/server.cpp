@@ -388,3 +388,12 @@ void Server::addCommonHeaders(HttpResponse &response) {
     response.headers["Date"] = getCurrentDate();  // 实现 getCurrentDate() 方法返回当前时间
     response.headers["Connection"] = "close";  // 或者 "keep-alive"，取决于您的实现
 }
+
+std::string Server::getCurrentDate() const {
+    auto now = std::chrono::system_clock::now();
+    auto in_time_t = std::chrono::system_clock::to_time_t(now);
+
+    std::stringstream ss;
+    ss << std::put_time(std::gmtime(&in_time_t), "%a, %d %b %Y %H:%M:%S GMT");
+    return ss.str();
+}
