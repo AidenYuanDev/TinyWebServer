@@ -17,3 +17,5 @@
 [现代CMake使用，使C++代码解耦](https://blog.csdn.net/Ten_years_star/article/details/140657310)
 
 [四、单线程多路IO复用+多线程业务工作池](https://blog.csdn.net/Ten_years_star/article/details/140666040)
+
+[五、HTTP解析与响应](https://blog.csdn.net/Ten_years_star/article/details/140848143)

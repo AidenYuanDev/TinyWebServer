@@ -53,9 +53,9 @@ private:
     void handleWrite(int client_fd);
     void removeClient(int client_fd);
     void modifyEpollEvent(int fd, uint32_t events);
-    HttpResponse generateResponse(const HttpRequest &request);
-
+    
     // 新增方法
+    HttpResponse generateResponse(const HttpRequest &request);
     HttpResponse handleGetRequest(const HttpRequest &request);
     HttpResponse handleHeadRequest(const HttpRequest &request);
     HttpResponse handlePostRequest(const HttpRequest &request);
