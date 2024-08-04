@@ -1,4 +1,4 @@
-// http_parser.cpp
+// modules/http_parser/src/http_parser.cpp
 
 #include "http_parser.h"
 #include <algorithm>
@@ -24,6 +24,7 @@ HttpRequest::HttpRequest() : method(HttpMethod::UNKNOWN), version(HttpVersion::U
 
 HttpParser::HttpParser() {
     reset();
+    LOG_DEBUG("HttpParser initialized");
 }
 
 void HttpParser::reset() {
@@ -32,27 +33,33 @@ void HttpParser::reset() {
     currentHeaderName.clear();
     currentHeaderValue.clear();
     contentLength = 0;
+    LOG_DEBUG("HttpParser reset");
 }
 
 std::optional<HttpRequest> HttpParser::parse(std::string_view data) {
+    LOG_DEBUG("Parsing HTTP request, data length: %zu", data.length());
     for (char c : data) {
         if (!parseChar(c)) {
             if (errorCallback) {
                 errorCallback("Parsing error");
             }
+            LOG_ERROR("HTTP parsing error");
             return std::nullopt;
         }
         if (state == ParserState::COMPLETE) {
+            LOG_INFO("HTTP request parsed successfully");
             auto result = std::move(request);
             reset();
             return result;
         }
     }
+    LOG_DEBUG("Partial HTTP request parsed, waiting for more data");
     return std::nullopt;
 }
 
 void HttpParser::setErrorCallback(ErrorCallback cb) {
     errorCallback = std::move(cb);
+    LOG_DEBUG("Error callback set for HttpParser");
 }
 
 bool HttpParser::parseChar(char c) {
@@ -72,6 +79,7 @@ bool HttpParser::parseMethod(char c) {
         request.method = stringToMethod(request.url);
         request.url.clear();
         state = ParserState::URL;
+        LOG_DEBUG("HTTP method parsed: %s", toString(request.method).data());
     } else {
         request.url += c;
     }
@@ -81,6 +89,7 @@ bool HttpParser::parseMethod(char c) {
 bool HttpParser::parseUrl(char c) {
     if (c == ' ') {
         state = ParserState::VERSION;
+        LOG_DEBUG("URL parsed: %s", request.url.c_str());
     } else {
         request.url += c;
     }
@@ -95,13 +104,16 @@ bool HttpParser::parseVersion(char c) {
         if (c == httpVersion[versionIndex]) {
             ++versionIndex;
         } else {
+            LOG_ERROR("Invalid HTTP version");
             return false;
         }
     } else if (c == '1' || c == '2') {
         request.version = (c == '1') ? HttpVersion::HTTP_1_1 : HttpVersion::HTTP_2_0;
         versionIndex = 0;
         state = ParserState::HEADER_NAME;
+        LOG_DEBUG("HTTP version parsed: %s", toString(request.version).data());
     } else {
+        LOG_ERROR("Invalid HTTP version");
         return false;
     }
     return true;
@@ -117,6 +129,9 @@ bool HttpParser::parseHeaderName(char c) {
             processHeader();
         } else {
             state = (contentLength > 0) ? ParserState::BODY : ParserState::COMPLETE;
+            if (state == ParserState::COMPLETE) {
+                LOG_DEBUG("Headers parsing completed");
+            }
         }
     } else {
         currentHeaderName += std::tolower(c);
@@ -140,6 +155,7 @@ bool HttpParser::parseBody(char c) {
     request.body.push_back(c);
     if (request.body.size() == contentLength) {
         state = ParserState::COMPLETE;
+        LOG_DEBUG("HTTP body parsed, length: %zu", contentLength);
     }
     return true;
 }
@@ -147,8 +163,10 @@ bool HttpParser::parseBody(char c) {
 void HttpParser::processHeader() {
     if (currentHeaderName == "content-length") {
         contentLength = std::stoul(currentHeaderValue);
+        LOG_DEBUG("Content-Length header processed: %zu", contentLength);
     }
     request.headers[currentHeaderName] = trim(currentHeaderValue);
+    LOG_DEBUG("Header processed: %s: %s", currentHeaderName.c_str(), currentHeaderValue.c_str());
     currentHeaderName.clear();
     currentHeaderValue.clear();
 }
@@ -182,6 +200,7 @@ std::unordered_map<std::string, std::string> HttpParser::parseQueryParams(const 
                 std::string key = pair.substr(0, eq_pos);
                 std::string value = pair.substr(eq_pos + 1);
                 params[key] = value;
+                LOG_DEBUG("Query param parsed: %s = %s", key.c_str(), value.c_str());
             }
         }
     }

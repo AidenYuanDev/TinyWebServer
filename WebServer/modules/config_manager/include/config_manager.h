@@ -1,4 +1,5 @@
-// config_manager.h
+// modules/config_manager/include/config_manager.h
+
 #pragma once
 
 #include <yaml-cpp/yaml.h>
@@ -7,6 +8,7 @@
 #include <memory>
 #include <optional>
 #include <mutex>
+#include "logger.h"
 
 class ConfigManager {
 public:
@@ -25,7 +27,8 @@ public:
     int getPort() const;
     int getThreadPoolSize() const;
     std::string getPublicDirectory() const;
-    // ... 其他特定配置项的getter方法
+    LogLevel getLogLevel() const;
+    std::string getLogFile() const;
 
 private:
     ConfigManager() = default;

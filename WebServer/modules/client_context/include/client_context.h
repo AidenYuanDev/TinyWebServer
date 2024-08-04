@@ -1,10 +1,13 @@
+// modules/client_context/include/client_context.h
+
 #pragma once
 #include <atomic>
 #include <mutex>
 #include <queue>
 #include <string>
 #include "http_parser.h"
-#include "http_response.h"  // 添加这行
+#include "http_response.h"
+#include "logger.h"
 
 class ClientContext {
 public:

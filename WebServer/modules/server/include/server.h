@@ -19,6 +19,7 @@
 #include "http_parser.h"
 #include "thread_pool.h"
 #include "config_manager.h"
+#include "logger.h"
 
 class IServer {
 public:

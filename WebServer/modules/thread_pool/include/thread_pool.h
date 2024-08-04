@@ -1,4 +1,5 @@
-// thread_pool.h
+// modules/thread_pool/include/thread_pool.h
+
 #pragma once
 
 #include <vector>
@@ -12,6 +13,7 @@
 #include <stdexcept>
 #include <atomic>
 #include "config_manager.h"
+#include "logger.h"
 
 class ThreadPool {
 public:
@@ -33,10 +35,13 @@ public:
         std::future<return_type> res = task->get_future();
         {
             std::unique_lock<std::mutex> lock(queue_mutex);
-            if(stop)
+            if(stop) {
+                LOG_ERROR("Attempt to enqueue task on stopped ThreadPool");
                 throw std::runtime_error("enqueue on stopped ThreadPool");
+            }
             tasks.emplace([task](){ (*task)(); });
         }
+        LOG_DEBUG("Task enqueued in thread pool");
         condition.notify_one();
         return res;
     }

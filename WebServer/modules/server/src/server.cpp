@@ -1,18 +1,20 @@
-// server.cpp
+// modules/server/src/server.cpp
 
 #include "server.h"
-#include <cstring>
-#include <iostream>
+
 #include <arpa/inet.h>
-#include <sys/socket.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <errno.h>
-#include <fstream>
-#include <filesystem>
+#include <fcntl.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include <chrono>
-#include <sstream>
+#include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <iomanip>
+#include <iostream>
+#include <sstream>
 
 Server::Server() {
     initializeServer();
@@ -20,11 +22,12 @@ Server::Server() {
 }
 
 void Server::initializeServer() {
-    auto& config = ConfigManager::getInstance();
-    
+    auto &config = ConfigManager::getInstance();
+
     int port = config.getPort();
     server_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (server_fd < 0) {
+        LOG_FATAL("Socket creation failed");
         throw std::runtime_error("Socket creation failed");
     }
 
@@ -35,17 +38,20 @@ void Server::initializeServer() {
 
     if (bind(server_fd, (sockaddr *)&server_addr, sizeof(server_addr)) < 0) {
         close(server_fd);
+        LOG_FATAL("Bind failed");
         throw std::runtime_error("Bind failed");
     }
 
     if (listen(server_fd, SOMAXCONN) < 0) {
         close(server_fd);
+        LOG_FATAL("Listen failed");
         throw std::runtime_error("Listen failed");
     }
 
     epoll_fd = epoll_create1(0);
     if (epoll_fd < 0) {
         close(server_fd);
+        LOG_FATAL("epoll_create1 failed");
         throw std::runtime_error("epoll_create1 failed");
     }
 
@@ -55,24 +61,25 @@ void Server::initializeServer() {
     if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &event) < 0) {
         close(server_fd);
         close(epoll_fd);
+        LOG_FATAL("epoll_ctl failed");
         throw std::runtime_error("epoll_ctl failed");
     }
 
     publicDirectory = config.getPublicDirectory();
-    pool = std::make_unique<ThreadPool>();  // 修改这里，不再传递线程数
+    pool = std::make_unique<ThreadPool>();
 
-    std::cout << "Server initialized on port " << port << " with " 
-              << config.getThreadPoolSize() << " threads" << std::endl;
+    LOG_INFO("Server initialized on port %d with %d threads", port, config.getThreadPoolSize());
 }
 
 void Server::run() {
+    LOG_INFO("Server starting...");
     std::vector<epoll_event> events(MAX_EVENTS);
 
     while (true) {
         int event_count = epoll_wait(epoll_fd, events.data(), MAX_EVENTS, -1);
 
         if (event_count < 0) {
-            std::cerr << "epoll_wait failed: " << strerror(errno) << std::endl;
+            LOG_ERROR("epoll_wait failed: %s", strerror(errno));
             break;
         }
 
@@ -88,6 +95,7 @@ void Server::run() {
 
 void Server::registerHandler(HttpMethod method, const std::string &path, RequestHandler handler) {
     handlers[method][path] = std::move(handler);
+    LOG_DEBUG("Registered handler for method %d, path %s", static_cast<int>(method), path.c_str());
 }
 
 void Server::handleNewConnection() {
@@ -99,26 +107,26 @@ void Server::handleNewConnection() {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 break;
             } else {
-                std::cerr << "Accept failed: " << strerror(errno) << std::endl;
+                LOG_ERROR("Accept failed: %s", strerror(errno));
                 break;
             }
         }
 
         char client_ip[INET_ADDRSTRLEN];
         inet_ntop(AF_INET, &(client_addr.sin_addr), client_ip, INET_ADDRSTRLEN);
-        std::cout << "New connection from " << client_ip << ":" << ntohs(client_addr.sin_port) << std::endl;
+        LOG_INFO("New connection from %s:%d", client_ip, ntohs(client_addr.sin_port));
 
         epoll_event event;
         event.data.fd = client_fd;
         event.events = EPOLLIN | EPOLLET;
         int epoll_ctl_result = epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &event);
         if (epoll_ctl_result < 0) {
-            std::cerr << "epoll_ctl failed for client socket: " << strerror(errno) << std::endl;
+            LOG_ERROR("epoll_ctl failed for client socket: %s", strerror(errno));
             close(client_fd);
         } else {
             std::lock_guard<std::mutex> lock(clients_mutex);
             clients[client_fd] = std::make_shared<ClientContext>();
-            std::cout << "Client " << client_fd << " added to epoll" << std::endl;
+            LOG_DEBUG("Client %d added to epoll", client_fd);
         }
     }
 }
@@ -127,19 +135,19 @@ void Server::handleClientEvent(epoll_event &event) {
     int client_fd = event.data.fd;
     if (event.events & (EPOLLERR | EPOLLHUP)) {
         if (event.events & EPOLLERR) {
-            std::cerr << "Error event for client " << client_fd << std::endl;
+            LOG_ERROR("Error event for client %d", client_fd);
         }
         if (event.events & EPOLLHUP) {
-            std::cout << "Hangup event for client " << client_fd << std::endl;
+            LOG_INFO("Hangup event for client %d", client_fd);
         }
         removeClient(client_fd);
     } else {
         if (event.events & EPOLLIN) {
-            std::cout << "Read event for client " << client_fd << std::endl;
+            LOG_DEBUG("Read event for client %d", client_fd);
             handleRead(client_fd);
         }
         if (event.events & EPOLLOUT) {
-            std::cout << "Write event for client " << client_fd << std::endl;
+            LOG_DEBUG("Write event for client %d", client_fd);
             handleWrite(client_fd);
         }
     }
@@ -152,7 +160,7 @@ void Server::handleRead(int client_fd) {
             std::lock_guard<std::mutex> lock(clients_mutex);
             auto it = clients.find(client_fd);
             if (it == clients.end() || !it->second->isActive()) {
-                std::cout << "Client " << client_fd << " not found or not active, skipping read handling" << std::endl;
+                LOG_DEBUG("Client %d not found or not active, skipping read handling", client_fd);
                 return;
             }
             client = it->second;
@@ -165,17 +173,18 @@ void Server::handleRead(int client_fd) {
                 if (errno == EAGAIN || errno == EWOULDBLOCK)
                     break;
                 else {
-                    std::cerr << "Read failed on socket " << client_fd << std::endl;
+                    LOG_ERROR("Read failed on socket %d: %s", client_fd, strerror(errno));
                     removeClient(client_fd);
                     break;
                 }
             } else if (read_len == 0) {
-                std::cout << "Client disconnected: " << client_fd << std::endl;
+                LOG_INFO("Client disconnected: %d", client_fd);
                 removeClient(client_fd);
                 break;
             } else {
                 auto request = client->parser.parse(std::string_view(buffer.data(), read_len));
                 if (request) {
+                    LOG_DEBUG("Received request from client %d: %s %s", client_fd, toString(request->method).data(), request->url.c_str());
                     HttpResponse response = generateResponse(*request);
                     client->pushResponse(response);
                     client->setWriteReady(true);
@@ -202,10 +211,10 @@ void Server::handleWrite(int client_fd) {
 
         HttpResponse response = client->popResponse();
         std::string headers = response.toString();
-        
+
         // 发送头部
         if (send(client_fd, headers.c_str(), headers.length(), 0) < 0) {
-            std::cerr << "Failed to send headers" << std::endl;
+            LOG_ERROR("Failed to send headers to client %d: %s", client_fd, strerror(errno));
             removeClient(client_fd);
             return;
         }
@@ -219,13 +228,15 @@ void Server::handleWrite(int client_fd) {
                     // 资源暂时不可用，稍后重试
                     continue;
                 } else {
-                    std::cerr << "Send error" << std::endl;
+                    LOG_ERROR("Send error to client %d: %s", client_fd, strerror(errno));
                     removeClient(client_fd);
                     return;
                 }
             }
             total_sent += sent;
         }
+
+        LOG_DEBUG("Sent response to client %d: %d bytes", client_fd, total_sent);
 
         if (!client->hasResponses()) {
             client->setWriteReady(false);
@@ -249,9 +260,10 @@ void Server::removeClient(int client_fd) {
         client->deactivate();
         int epoll_ctl_result = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, nullptr);
         if (epoll_ctl_result < 0) {
-            std::cerr << "Failed to remove client from epoll: " << strerror(errno) << std::endl;
+            LOG_ERROR("Failed to remove client %d from epoll: %s", client_fd, strerror(errno));
         }
         close(client_fd);
+        LOG_INFO("Client %d removed", client_fd);
     }
 }
 
@@ -260,7 +272,7 @@ void Server::modifyEpollEvent(int fd, uint32_t events) {
     event.data.fd = fd;
     event.events = events | EPOLLET;
     if (epoll_ctl(epoll_fd, EPOLL_CTL_MOD, fd, &event) < 0) {
-        std::cerr << "Failed to modify epoll event for fd " << fd << std::endl;
+        LOG_ERROR("Failed to modify epoll event for fd %d: %s", fd, strerror(errno));
     }
 }
 
@@ -283,9 +295,9 @@ HttpResponse Server::generateResponse(const HttpRequest &request) {
     }
 }
 
-HttpResponse Server::serveStaticFile(const HttpRequest& request) {
+HttpResponse Server::serveStaticFile(const HttpRequest &request) {
     std::filesystem::path filePath = publicDirectory + request.url;
-    
+
     if (std::filesystem::is_directory(filePath)) {
         filePath /= "index.html";
     }
@@ -296,7 +308,7 @@ HttpResponse Server::serveStaticFile(const HttpRequest& request) {
             HttpResponse response;
             response.status_code = 200;
             response.status_message = "OK";
-            
+
             // 读取文件内容
             file.seekg(0, std::ios::end);
             size_t size = file.tellg();
@@ -307,15 +319,16 @@ HttpResponse Server::serveStaticFile(const HttpRequest& request) {
             response.headers["Content-Type"] = getMimeType(filePath.string());
             response.headers["Content-Length"] = std::to_string(response.body.size());
             addCommonHeaders(response);
+            LOG_DEBUG("Serving static file: %s", filePath.string().c_str());
             return response;
         }
     }
-
     // 文件不存在，返回 404
+    LOG_WARN("File not found: %s", filePath.string().c_str());
     return HttpResponseFactory::createNotFoundResponse();
 }
 
-std::string Server::getMimeType(const std::string& filename) {
+std::string Server::getMimeType(const std::string &filename) {
     size_t dotPos = filename.find_last_of('.');
     if (dotPos != std::string::npos) {
         std::string ext = filename.substr(dotPos);
@@ -334,17 +347,20 @@ HttpResponse Server::handleGetRequest(const HttpRequest &request) {
     if (methodHandlers != handlers.end()) {
         auto handler = methodHandlers->second.find(request.url);
         if (handler != methodHandlers->second.end()) {
+            LOG_DEBUG("Custom handler found for GET request: %s", request.url.c_str());
             return handler->second(request);
         }
     }
-    
+
     // 如果没有注册的处理程序，则尝试提供静态文件
+    LOG_DEBUG("Serving static file for GET request: %s", request.url.c_str());
     return serveStaticFile(request);
 }
 
 HttpResponse Server::handleHeadRequest(const HttpRequest &request) {
     HttpResponse response = handleGetRequest(request);
     response.body.clear();  // HEAD 请求不返回响应体
+    LOG_DEBUG("Handled HEAD request for: %s", request.url.c_str());
     return response;
 }
 
@@ -353,9 +369,11 @@ HttpResponse Server::handlePostRequest(const HttpRequest &request) {
     if (methodHandlers != handlers.end()) {
         auto handler = methodHandlers->second.find(request.url);
         if (handler != methodHandlers->second.end()) {
+            LOG_DEBUG("Custom handler found for POST request: %s", request.url.c_str());
             return handler->second(request);
         }
     }
+    LOG_WARN("No handler found for POST request: %s", request.url.c_str());
     return createMethodNotAllowedResponse();
 }
 
@@ -364,9 +382,11 @@ HttpResponse Server::handlePutRequest(const HttpRequest &request) {
     if (methodHandlers != handlers.end()) {
         auto handler = methodHandlers->second.find(request.url);
         if (handler != methodHandlers->second.end()) {
+            LOG_DEBUG("Custom handler found for PUT request: %s", request.url.c_str());
             return handler->second(request);
         }
     }
+    LOG_WARN("No handler found for PUT request: %s", request.url.c_str());
     return createMethodNotAllowedResponse();
 }
 
@@ -375,18 +395,21 @@ HttpResponse Server::handleDeleteRequest(const HttpRequest &request) {
     if (methodHandlers != handlers.end()) {
         auto handler = methodHandlers->second.find(request.url);
         if (handler != methodHandlers->second.end()) {
+            LOG_DEBUG("Custom handler found for DELETE request: %s", request.url.c_str());
             return handler->second(request);
         }
     }
+    LOG_WARN("No handler found for DELETE request: %s", request.url.c_str());
     return createMethodNotAllowedResponse();
 }
 
-HttpResponse Server::handleOptionsRequest(const HttpRequest& /* request */) {
+HttpResponse Server::handleOptionsRequest(const HttpRequest & /* request */) {
     HttpResponse response;
     response.status_code = 200;
     response.status_message = "OK";
     response.headers["Allow"] = "GET, HEAD, POST, PUT, DELETE, OPTIONS";
     addCommonHeaders(response);
+    LOG_DEBUG("Handled OPTIONS request");
     return response;
 }
 
@@ -396,13 +419,14 @@ HttpResponse Server::createMethodNotAllowedResponse() {
     response.status_message = "Method Not Allowed";
     response.headers["Allow"] = "GET, HEAD, POST, PUT, DELETE, OPTIONS";
     addCommonHeaders(response);
+    LOG_WARN("Returned 405 Method Not Allowed response");
     return response;
 }
 
 void Server::addCommonHeaders(HttpResponse &response) {
-    response.headers["Server"] = "YourServerName/1.0";
+    response.headers["Server"] = "TinyWebServer/1.0";
     response.headers["Date"] = getCurrentDate();
-    response.headers["Connection"] = "close";  // 或者使用 "keep-alive"，取决于您的实现
+    response.headers["Connection"] = "close";
 }
 
 std::string Server::getCurrentDate() const {
@@ -415,23 +439,7 @@ std::string Server::getCurrentDate() const {
 }
 
 void Server::initializeMimeTypes() {
-    mimeTypes = {
-        {".html", "text/html"},
-        {".css", "text/css"},
-        {".js", "application/javascript"},
-        {".json", "application/json"},
-        {".png", "image/png"},
-        {".jpg", "image/jpeg"},
-        {".jpeg", "image/jpeg"},
-        {".gif", "image/gif"},
-        {".svg", "image/svg+xml"},
-        {".ico", "image/x-icon"},
-        {".webp", "image/webp"},
-        {".txt", "text/plain"},
-        {".pdf", "application/pdf"},
-        {".xml", "application/xml"},
-        {".zip", "application/zip"},
-        {".mp3", "audio/mpeg"},
-        {".mp4", "video/mp4"}
-    };
+    mimeTypes = {{".html", "text/html"},  {".css", "text/css"},   {".js", "application/javascript"}, {".json", "application/json"}, {".png", "image/png"},       {".jpg", "image/jpeg"}, {".jpeg", "image/jpeg"}, {".gif", "image/gif"}, {".svg", "image/svg+xml"}, {".ico", "image/x-icon"},
+                 {".webp", "image/webp"}, {".txt", "text/plain"}, {".pdf", "application/pdf"},       {".xml", "application/xml"},   {".zip", "application/zip"}, {".mp3", "audio/mpeg"}, {".mp4", "video/mp4"}};
+    LOG_INFO("MIME types initialized");
 }
