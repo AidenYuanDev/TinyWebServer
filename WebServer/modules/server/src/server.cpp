@@ -9,9 +9,20 @@
 #include <unistd.h>
 #include <errno.h>
 #include <fstream>
-#include<filesystem>
+#include <filesystem>
+#include <chrono>
+#include <sstream>
+#include <iomanip>
 
-Server::Server(int port) : pool(4) {
+Server::Server() {
+    initializeServer();
+    initializeMimeTypes();
+}
+
+void Server::initializeServer() {
+    auto& config = ConfigManager::getInstance();
+    
+    int port = config.getPort();
     server_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (server_fd < 0) {
         throw std::runtime_error("Socket creation failed");
@@ -47,22 +58,11 @@ Server::Server(int port) : pool(4) {
         throw std::runtime_error("epoll_ctl failed");
     }
 
-    setPublicDirectory("./public");  // 设置公共目录
+    publicDirectory = config.getPublicDirectory();
+    pool = std::make_unique<ThreadPool>();  // 修改这里，不再传递线程数
 
-    // 初始化MIME类型映射
-    mimeTypes = {
-        {".html", "text/html"},
-        {".css", "text/css"},
-        {".js", "application/javascript"},
-        {".json", "application/json"},
-        {".png", "image/png"},
-        {".jpg", "image/jpeg"},
-        {".jpeg", "image/jpeg"},
-        {".gif", "image/gif"},
-        {".svg", "image/svg+xml"},
-        {".ico", "image/x-icon"},
-        {".webp", "image/webp"}
-    };
+    std::cout << "Server initialized on port " << port << " with " 
+              << config.getThreadPoolSize() << " threads" << std::endl;
 }
 
 void Server::run() {
@@ -146,7 +146,7 @@ void Server::handleClientEvent(epoll_event &event) {
 }
 
 void Server::handleRead(int client_fd) {
-    pool.enqueue([this, client_fd] {
+    pool->enqueue([this, client_fd] {
         std::shared_ptr<ClientContext> client;
         {
             std::lock_guard<std::mutex> lock(clients_mutex);
@@ -158,7 +158,7 @@ void Server::handleRead(int client_fd) {
             client = it->second;
         }
 
-        std::string buffer(BUFFER_SIZE, 0);
+        std::vector<char> buffer(BUFFER_SIZE);
         while (true) {
             int read_len = read(client_fd, buffer.data(), buffer.size());
             if (read_len < 0) {
@@ -187,7 +187,7 @@ void Server::handleRead(int client_fd) {
 }
 
 void Server::handleWrite(int client_fd) {
-    pool.enqueue([this, client_fd] {
+    pool->enqueue([this, client_fd] {
         std::shared_ptr<ClientContext> client;
         {
             std::lock_guard<std::mutex> lock(clients_mutex);
@@ -278,14 +278,9 @@ HttpResponse Server::generateResponse(const HttpRequest &request) {
             return handleDeleteRequest(request);
         case HttpMethod::OPTIONS:
             return handleOptionsRequest(request);
-        // ... 其他方法 ...
         default:
             return createMethodNotAllowedResponse();
     }
-}
-
-void Server::setPublicDirectory(const std::string &path) {
-    publicDirectory = path;
 }
 
 HttpResponse Server::serveStaticFile(const HttpRequest& request) {
@@ -311,18 +306,13 @@ HttpResponse Server::serveStaticFile(const HttpRequest& request) {
 
             response.headers["Content-Type"] = getMimeType(filePath.string());
             response.headers["Content-Length"] = std::to_string(response.body.size());
+            addCommonHeaders(response);
             return response;
         }
     }
 
     // 文件不存在，返回 404
-    HttpResponse response;
-    response.status_code = 404;
-    response.status_message = "Not Found";
-    response.setBody("<html><body><h1>404 Not Found</h1></body></html>");
-    response.headers["Content-Type"] = "text/html";
-    response.headers["Content-Length"] = std::to_string(response.body.size());
-    return response;
+    return HttpResponseFactory::createNotFoundResponse();
 }
 
 std::string Server::getMimeType(const std::string& filename) {
@@ -339,7 +329,16 @@ std::string Server::getMimeType(const std::string& filename) {
 }
 
 HttpResponse Server::handleGetRequest(const HttpRequest &request) {
-    // 现有的静态文件服务逻辑
+    // 检查是否有注册的处理程序
+    auto methodHandlers = handlers.find(HttpMethod::GET);
+    if (methodHandlers != handlers.end()) {
+        auto handler = methodHandlers->second.find(request.url);
+        if (handler != methodHandlers->second.end()) {
+            return handler->second(request);
+        }
+    }
+    
+    // 如果没有注册的处理程序，则尝试提供静态文件
     return serveStaticFile(request);
 }
 
@@ -350,28 +349,44 @@ HttpResponse Server::handleHeadRequest(const HttpRequest &request) {
 }
 
 HttpResponse Server::handlePostRequest(const HttpRequest &request) {
-    // 处理 POST 请求的逻辑
-    // 例如，可以解析表单数据或 JSON 数据
-    // ...
+    auto methodHandlers = handlers.find(HttpMethod::POST);
+    if (methodHandlers != handlers.end()) {
+        auto handler = methodHandlers->second.find(request.url);
+        if (handler != methodHandlers->second.end()) {
+            return handler->second(request);
+        }
+    }
+    return createMethodNotAllowedResponse();
 }
 
 HttpResponse Server::handlePutRequest(const HttpRequest &request) {
-    // 处理 PUT 请求的逻辑
-    // 例如，更新资源
-    // ...
+    auto methodHandlers = handlers.find(HttpMethod::PUT);
+    if (methodHandlers != handlers.end()) {
+        auto handler = methodHandlers->second.find(request.url);
+        if (handler != methodHandlers->second.end()) {
+            return handler->second(request);
+        }
+    }
+    return createMethodNotAllowedResponse();
 }
 
 HttpResponse Server::handleDeleteRequest(const HttpRequest &request) {
-    // 处理 DELETE 请求的逻辑
-    // 例如，删除资源
-    // ...
+    auto methodHandlers = handlers.find(HttpMethod::DELETE);
+    if (methodHandlers != handlers.end()) {
+        auto handler = methodHandlers->second.find(request.url);
+        if (handler != methodHandlers->second.end()) {
+            return handler->second(request);
+        }
+    }
+    return createMethodNotAllowedResponse();
 }
 
-HttpResponse Server::handleOptionsRequest(const HttpRequest &request) {
+HttpResponse Server::handleOptionsRequest(const HttpRequest& /* request */) {
     HttpResponse response;
     response.status_code = 200;
     response.status_message = "OK";
     response.headers["Allow"] = "GET, HEAD, POST, PUT, DELETE, OPTIONS";
+    addCommonHeaders(response);
     return response;
 }
 
@@ -380,13 +395,14 @@ HttpResponse Server::createMethodNotAllowedResponse() {
     response.status_code = 405;
     response.status_message = "Method Not Allowed";
     response.headers["Allow"] = "GET, HEAD, POST, PUT, DELETE, OPTIONS";
+    addCommonHeaders(response);
     return response;
 }
 
 void Server::addCommonHeaders(HttpResponse &response) {
     response.headers["Server"] = "YourServerName/1.0";
-    response.headers["Date"] = getCurrentDate();  // 实现 getCurrentDate() 方法返回当前时间
-    response.headers["Connection"] = "close";  // 或者 "keep-alive"，取决于您的实现
+    response.headers["Date"] = getCurrentDate();
+    response.headers["Connection"] = "close";  // 或者使用 "keep-alive"，取决于您的实现
 }
 
 std::string Server::getCurrentDate() const {
@@ -396,4 +412,26 @@ std::string Server::getCurrentDate() const {
     std::stringstream ss;
     ss << std::put_time(std::gmtime(&in_time_t), "%a, %d %b %Y %H:%M:%S GMT");
     return ss.str();
+}
+
+void Server::initializeMimeTypes() {
+    mimeTypes = {
+        {".html", "text/html"},
+        {".css", "text/css"},
+        {".js", "application/javascript"},
+        {".json", "application/json"},
+        {".png", "image/png"},
+        {".jpg", "image/jpeg"},
+        {".jpeg", "image/jpeg"},
+        {".gif", "image/gif"},
+        {".svg", "image/svg+xml"},
+        {".ico", "image/x-icon"},
+        {".webp", "image/webp"},
+        {".txt", "text/plain"},
+        {".pdf", "application/pdf"},
+        {".xml", "application/xml"},
+        {".zip", "application/zip"},
+        {".mp3", "audio/mpeg"},
+        {".mp4", "video/mp4"}
+    };
 }

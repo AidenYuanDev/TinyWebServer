@@ -22,6 +22,10 @@ target_link_libraries(server
     client_context
     http_parser
     http_response
+    logger
+    config_manager
+    yaml-cpp
+    route_manager
 )
 
 # 测试

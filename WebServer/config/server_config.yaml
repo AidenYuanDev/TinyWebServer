@@ -1,0 +1,4 @@
+server:
+  port: 8080
+  thread_pool_size: 4
+  public_directory: "./public"

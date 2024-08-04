@@ -15,6 +15,11 @@ target_include_directories(thread_pool
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
-
+target_link_libraries(thread_pool
+    PRIVATE
+    logger
+    config_manager
+    yaml-cpp
+)
 # 测试
 add_subdirectory(test)

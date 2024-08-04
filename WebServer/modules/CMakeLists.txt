@@ -5,6 +5,9 @@ set(MODULES
     server
     http_parser
     http_response
+    logger
+    config_manager
+    route_manager
     # 添加其他模块...
 )
 

@@ -20,6 +20,9 @@ target_link_libraries(client_context
     PRIVATE
     http_parser
     http_response
+    logger
+    config_manager
+    yaml-cpp
 )
 
 # 测试

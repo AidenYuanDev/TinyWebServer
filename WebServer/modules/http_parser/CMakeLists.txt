@@ -19,6 +19,10 @@ target_include_directories(http_parser
 target_link_libraries(http_parser
 PRIVATE
     http_response
+    logger
+    config_manager
+    yaml-cpp
+
 )
 
 # 测试

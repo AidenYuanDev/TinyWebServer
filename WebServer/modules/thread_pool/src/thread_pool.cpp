@@ -1,39 +1,51 @@
+// thread_pool.cpp
 #include "thread_pool.h"
 
-ThreadPool::ThreadPool(const int num_thread) : stop(false) {
-    workers.reserve(num_thread);
-    for (int i = 1; i <= num_thread; i++) {
-        workers.emplace_back([this] {
-            while (true) {
-                function<void()> task;
-                {
-                    unique_lock<mutex> lock(queue_mutex);
-                    condition.wait(lock, [this] { return stop || !tasks.empty(); });
-                    if (stop && tasks.empty()) return;
-                    task = std::move(tasks.front());
-                    tasks.pop();
+ThreadPool::ThreadPool() : stop(false), active_tasks(0) {
+    init_pool();
+}
+
+void ThreadPool::init_pool() {
+    auto& config = ConfigManager::getInstance();
+    int thread_count = config.getThreadPoolSize();
+
+    for(int i = 0; i < thread_count; ++i) {
+        workers.emplace_back(
+            [this] {
+                for(;;) {
+                    std::function<void()> task;
+                    {
+                        std::unique_lock<std::mutex> lock(this->queue_mutex);
+                        this->condition.wait(lock,
+                            [this]{ return this->stop || !this->tasks.empty(); });
+                        if(this->stop && this->tasks.empty())
+                            return;
+                        task = std::move(this->tasks.front());
+                        this->tasks.pop();
+                    }
+                    this->active_tasks++;
+                    task();
+                    this->active_tasks--;
+                    this->condition.notify_all();
                 }
-                active_tasks++;
-                task();
-                active_tasks--;
-                condition.notify_all();
             }
-        });
+        );
     }
 }
 
 ThreadPool::~ThreadPool() {
     {
-        unique_lock<mutex> lock(queue_mutex);
+        std::unique_lock<std::mutex> lock(queue_mutex);
         stop = true;
     }
     condition.notify_all();
-    for (auto &worker : workers) worker.join();
+    for(std::thread &worker: workers)
+        worker.join();
 }
 
 void ThreadPool::wait_all() {
-    unique_lock<mutex> lock(queue_mutex);
-    condition.wait(lock, [this] {
+    std::unique_lock<std::mutex> lock(queue_mutex);
+    condition.wait(lock, [this] { 
         return stop || (tasks.empty() && active_tasks == 0); 
     });
 }

@@ -1,11 +1,11 @@
-// server.h
+// modules/server/include/server.h
+
 #pragma once
+
 #include <arpa/inet.h>
-#include <errno.h>
-#include <fcntl.h>
-#include <sys/epoll.h>  // 添加这行
+#include <sys/epoll.h>
 #include <sys/socket.h>
-#include <unistd.h>  // 添加这行
+#include <unistd.h>
 
 #include <cstring>
 #include <functional>
@@ -18,9 +18,7 @@
 #include "client_context.h"
 #include "http_parser.h"
 #include "thread_pool.h"
-
-const int MAX_EVENTS = 10;
-const int BUFFER_SIZE = 1024;
+#include "config_manager.h"
 
 class IServer {
 public:
@@ -32,21 +30,24 @@ class Server : public IServer {
 public:
     using RequestHandler = std::function<HttpResponse(const HttpRequest &)>;
 
-    Server(int port);
+    Server();
     void run() override;
     void registerHandler(HttpMethod method, const std::string &path, RequestHandler handler);
-    void setPublicDirectory(const std::string &path);
 
 private:
+    static constexpr std::size_t MAX_EVENTS = 2048;
+    static constexpr std::size_t BUFFER_SIZE = 8192; // 8KB
+
     int server_fd;
     int epoll_fd;
-    ThreadPool pool;
+    std::unique_ptr<ThreadPool> pool;
     std::unordered_map<int, std::shared_ptr<ClientContext>> clients;
     std::mutex clients_mutex;
     std::unordered_map<HttpMethod, std::unordered_map<std::string, RequestHandler>> handlers;
     std::string publicDirectory;
     std::unordered_map<std::string, std::string> mimeTypes;
 
+    void initializeServer();
     void handleNewConnection();
     void handleClientEvent(epoll_event &event);
     void handleRead(int client_fd);
@@ -54,7 +55,6 @@ private:
     void removeClient(int client_fd);
     void modifyEpollEvent(int fd, uint32_t events);
     
-    // 新增方法
     HttpResponse generateResponse(const HttpRequest &request);
     HttpResponse handleGetRequest(const HttpRequest &request);
     HttpResponse handleHeadRequest(const HttpRequest &request);
@@ -67,5 +67,7 @@ private:
     std::string getCurrentDate() const;
 
     HttpResponse serveStaticFile(const HttpRequest &request);
-    std::string getMimeType(const std::string &filename);
+    std::string getMimeType(const std::string& filename);
+
+    void initializeMimeTypes();
 };

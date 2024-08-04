@@ -16,5 +16,9 @@ target_include_directories(http_response
         ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
+target_link_libraries(http_response
+    PRIVATE
+    logger
+)
 # 测试
 # add_subdirectory(test)

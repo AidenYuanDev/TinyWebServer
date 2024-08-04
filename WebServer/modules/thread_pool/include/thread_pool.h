@@ -1,54 +1,56 @@
+// thread_pool.h
 #pragma once
 
-#include <algorithm>
-#include <atomic>
-#include <chrono>
-#include <condition_variable>
-#include <functional>
-#include <future>
-#include <iostream>
-#include <memory>
-#include <mutex>
-#include <queue>
-#include <thread>
 #include <vector>
-using namespace std;
+#include <queue>
+#include <memory>
+#include <thread>
+#include <mutex>
+#include <condition_variable>
+#include <future>
+#include <functional>
+#include <stdexcept>
+#include <atomic>
+#include "config_manager.h"
 
 class ThreadPool {
 public:
-    explicit ThreadPool(const int num_thread);
+    ThreadPool();
     ThreadPool(const ThreadPool &) = delete;
     ThreadPool &operator=(const ThreadPool &) = delete;
     ~ThreadPool();
 
-    template <typename F, typename... Args>
-    auto enqueue(F &&f, Args &&...args) -> future<decltype(f(args...))>;
-    void wait_all(); 
+    template<class F, class... Args>
+    auto enqueue(F&& f, Args&&... args) 
+        -> std::future<typename std::invoke_result_t<F, Args...>>
+    {
+        using return_type = typename std::invoke_result_t<F, Args...>;
+
+        auto task = std::make_shared< std::packaged_task<return_type()> >(
+            std::bind(std::forward<F>(f), std::forward<Args>(args)...)
+        );
+            
+        std::future<return_type> res = task->get_future();
+        {
+            std::unique_lock<std::mutex> lock(queue_mutex);
+            if(stop)
+                throw std::runtime_error("enqueue on stopped ThreadPool");
+            tasks.emplace([task](){ (*task)(); });
+        }
+        condition.notify_one();
+        return res;
+    }
+
+    void wait_all();
 
 private:
-    vector<thread> workers;
-    queue<function<void()>> tasks;
+    std::vector<std::thread> workers;
+    std::queue<std::function<void()>> tasks;
+    
+    std::mutex queue_mutex;
+    std::condition_variable condition;
+    std::atomic<bool> stop;
+    std::atomic<int> active_tasks;
 
-    mutex queue_mutex;
-    condition_variable condition;
-    atomic<bool> stop;
-    atomic<int> active_tasks;  
+    void init_pool();
 };
-
-template <class F, class... Args>
-auto ThreadPool::enqueue(F &&f, Args &&...args) -> future<decltype(f(args...))> {
-    using return_type = decltype(f(args...));
-    auto task = make_shared<packaged_task<return_type()>>(bind(std::forward<F>(f), std::forward<Args>(args)...));
-
-    future<return_type> res = task->get_future();
-    {
-        unique_lock<mutex> lock(queue_mutex);
-        if (stop) {
-            runtime_error("enqueue on stopped ThreadPool");
-        }
-        tasks.emplace([task] { (*task)(); });
-    }
-    condition.notify_one();
-    return res;
-}
-
