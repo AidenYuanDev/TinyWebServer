@@ -4,12 +4,10 @@
 
 #include <functional>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
-#include "logger.h"
 
 enum class HttpMethod { GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH, UNKNOWN };
 enum class HttpVersion { HTTP_1_0, HTTP_1_1, HTTP_2_0, UNKNOWN };

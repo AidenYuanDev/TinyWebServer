@@ -12,7 +12,6 @@
 #include <functional>
 #include <stdexcept>
 #include <atomic>
-#include "config_manager.h"
 #include "logger.h"
 
 class ThreadPool {

@@ -9,17 +9,13 @@
 
 #include <cstring>
 #include <functional>
-#include <iostream>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
-#include <vector>
 
 #include "client_context.h"
 #include "http_parser.h"
 #include "thread_pool.h"
-#include "config_manager.h"
-#include "logger.h"
 
 class IServer {
 public:

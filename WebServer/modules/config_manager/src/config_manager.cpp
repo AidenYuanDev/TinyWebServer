@@ -1,7 +1,6 @@
 // modules/config_manager/src/config_manager.cpp
 
 #include "config_manager.h"
-#include <iostream>
 
 ConfigManager& ConfigManager::getInstance() {
     static ConfigManager instance;

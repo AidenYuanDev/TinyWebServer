@@ -4,8 +4,6 @@
 
 #include <yaml-cpp/yaml.h>
 #include <string>
-#include <unordered_map>
-#include <memory>
 #include <optional>
 #include <mutex>
 #include "logger.h"
