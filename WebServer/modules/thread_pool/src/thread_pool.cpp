@@ -1,6 +1,7 @@
 // modules/thread_pool/src/thread_pool.cpp
 
 #include "thread_pool.h"
+#include "config_manager.h"
 
 ThreadPool::ThreadPool() : stop(false), active_tasks(0) {
     init_pool();

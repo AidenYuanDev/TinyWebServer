@@ -1,6 +1,7 @@
 // modules/http_parser/src/http_parser.cpp
 
 #include "http_parser.h"
+#include <logger.h>
 #include <algorithm>
 #include <array>
 #include <cctype>
