@@ -14,6 +14,7 @@ target_include_directories(server
         $<INSTALL_INTERFACE:include>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${YAML_CPP_INCLUDE_DIRS}
 )
 
 target_link_libraries(server
@@ -24,7 +25,7 @@ target_link_libraries(server
     http_response
     logger
     config_manager
-    yaml-cpp
+    ${YAML_CPP_LIBRARIES}
     route_manager
 )
 

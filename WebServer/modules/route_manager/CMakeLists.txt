@@ -14,6 +14,7 @@ target_include_directories(route_manager
         $<INSTALL_INTERFACE:include>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${YAML_CPP_INCLUDE_DIRS}
 )
 
 target_link_libraries(route_manager
@@ -22,7 +23,7 @@ target_link_libraries(route_manager
     http_response
     logger
     config_manager
-    yaml-cpp
+    ${YAML_CPP_LIBRARIES}
 )
 
 # 测试

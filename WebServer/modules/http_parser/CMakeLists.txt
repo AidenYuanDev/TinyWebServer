@@ -14,6 +14,7 @@ target_include_directories(http_parser
         $<INSTALL_INTERFACE:include>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
+        ${YAML_CPP_INCLUDE_DIRS}
 )
 
 target_link_libraries(http_parser
@@ -21,7 +22,7 @@ PRIVATE
     http_response
     logger
     config_manager
-    yaml-cpp
+    ${YAML_CPP_LIBRARIES} 
 
 )
 

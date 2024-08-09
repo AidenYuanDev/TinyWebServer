@@ -6,6 +6,7 @@ target_include_directories(${PROJECT_NAME}
     PUBLIC
         $<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
+        ${YAML_CPP_INCLUDE_DIRS}
 )
 
 target_link_libraries(${PROJECT_NAME}
@@ -17,7 +18,7 @@ target_link_libraries(${PROJECT_NAME}
     http_response
     logger
     config_manager
-    yaml-cpp
+    ${YAML_CPP_LIBRARIES}
     route_manager
 )
 
