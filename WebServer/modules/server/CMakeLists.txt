@@ -26,7 +26,6 @@ target_link_libraries(server
     logger
     config_manager
     ${YAML_CPP_LIBRARIES}
-    route_manager
 )
 
 # 测试

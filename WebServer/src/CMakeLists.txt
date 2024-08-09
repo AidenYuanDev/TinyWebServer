@@ -19,7 +19,6 @@ target_link_libraries(${PROJECT_NAME}
     logger
     config_manager
     ${YAML_CPP_LIBRARIES}
-    route_manager
 )
 
 # 复制 public 目录到构建目录

@@ -7,7 +7,6 @@ set(MODULES
     http_response
     logger
     config_manager
-    route_manager
     # 添加其他模块...
 )
 
