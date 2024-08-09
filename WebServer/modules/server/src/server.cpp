@@ -1,6 +1,7 @@
 // modules/server/src/server.cpp
 
 #include "server.h"
+#include <config_manager.h>
 
 #include <arpa/inet.h>
 #include <errno.h>

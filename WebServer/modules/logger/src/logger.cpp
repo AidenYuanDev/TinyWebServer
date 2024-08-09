@@ -3,6 +3,7 @@
 #include "logger.h"
 #include <chrono>
 #include <iomanip>
+#include <iostream>
 
 Logger& Logger::getInstance() {
     static Logger instance;

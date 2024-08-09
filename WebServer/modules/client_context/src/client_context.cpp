@@ -1,6 +1,7 @@
 // modules/client_context/src/client_context.cpp
 
 #include "client_context.h"
+#include <config_manager.h>
 
 ClientContext::ClientContext() : write_ready(false), active(true) {
     LOG_DEBUG("ClientContext created");
