@@ -1,8 +1,8 @@
 server:
   port: 8080
   thread_pool_size: 4
-  public_directory: "./public"
+  directory: "./public"
 
-logging:
+logger:
   level: "INFO"
-  file: "server.log"
+  name: "server.log"
