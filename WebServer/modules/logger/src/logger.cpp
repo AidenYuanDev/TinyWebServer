@@ -18,11 +18,12 @@ Logger::~Logger() {
     }
 }
 
-void Logger::setLogLevel(LogLevel level) {
+Logger& Logger::setLogLevel(LogLevel level) {
     currentLevel = level;
+    return *this;
 }
 
-void Logger::setLogFile(const std::string& filename) {
+Logger& Logger::setLogFile(const std::string& filename) {
     std::lock_guard<std::mutex> lock(logMutex);
     if (logFile.is_open()) {
         logFile.close();
@@ -31,6 +32,7 @@ void Logger::setLogFile(const std::string& filename) {
     if (!logFile.is_open()) {
         std::cerr << "Failed to open log file: " << filename << std::endl;
     }
+    return *this;
 }
 
 void Logger::writeLog(LogLevel level, const std::string& message) {

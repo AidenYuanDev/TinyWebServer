@@ -1,16 +1,11 @@
 // modules/thread_pool/src/thread_pool.cpp
-
 #include "thread_pool.h"
-#include "config_manager.h"
 
-ThreadPool::ThreadPool() : stop(false), active_tasks(0) {
+ThreadPool::ThreadPool(int thread_count) : stop(false), active_tasks(0), thread_count(thread_count) {
     init_pool();
 }
 
 void ThreadPool::init_pool() {
-    auto& config = ConfigManager::getInstance();
-    int thread_count = config.getThreadPoolSize();
-
     LOG_INFO("Initializing thread pool with %d threads", thread_count);
 
     for(int i = 0; i < thread_count; ++i) {

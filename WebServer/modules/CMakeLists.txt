@@ -1,12 +1,18 @@
 # 列出所有模块
 set(MODULES
     thread_pool
-    client_context
+    message_queue 
     server
     http_parser
     http_response
+    http_request
+    http_types
     logger
     config_manager
+    app
+    route
+    router
+    controller
     # 添加其他模块...
 )
 

@@ -21,7 +21,7 @@ target_include_directories(config_manager
 target_link_libraries(config_manager
     PRIVATE
     thread_pool
-    client_context
+    message_queue 
     http_parser
     http_response
     logger

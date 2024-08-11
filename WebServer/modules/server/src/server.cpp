@@ -1,6 +1,5 @@
-// modules/server/src/server.cpp
-
 #include "server.h"
+#include "http_parser.h"
 #include <config_manager.h>
 
 #include <arpa/inet.h>
@@ -11,21 +10,14 @@
 
 #include <chrono>
 #include <cstring>
-#include <filesystem>
-#include <fstream>
 #include <iomanip>
-#include <iostream>
 #include <sstream>
 
-Server::Server() {
-    initializeServer();
-    initializeMimeTypes();
+Server::Server(int port, std::string& publicDirectory, int threadPoolSize) {
+    initializeServer(port, publicDirectory, threadPoolSize);
 }
 
-void Server::initializeServer() {
-    auto &config = ConfigManager::getInstance();
-
-    int port = config.getPort();
+void Server::initializeServer(int port, std::string& publicDirectory, int threadPoolSize) {
     server_fd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
     if (server_fd < 0) {
         LOG_FATAL("Socket creation failed");
@@ -66,8 +58,10 @@ void Server::initializeServer() {
         throw std::runtime_error("epoll_ctl failed");
     }
 
-    publicDirectory = config.getPublicDirectory();
-    pool = std::make_unique<ThreadPool>();
+    auto &config = ConfigManager::getInstance();
+    this->publicDirectory = publicDirectory;
+    pool = std::make_unique<ThreadPool>(threadPoolSize);
+    staticFileController = std::make_unique<StaticFileController>(publicDirectory);
 
     LOG_INFO("Server initialized on port %d with %d threads", port, config.getThreadPoolSize());
 }
@@ -95,7 +89,7 @@ void Server::run() {
 }
 
 void Server::registerHandler(HttpMethod method, const std::string &path, RequestHandler handler) {
-    handlers[method][path] = std::move(handler);
+    router.addRoute(path, method, std::move(handler));
     LOG_DEBUG("Registered handler for method %d, path %s", static_cast<int>(method), path.c_str());
 }
 
@@ -126,7 +120,7 @@ void Server::handleNewConnection() {
             close(client_fd);
         } else {
             std::lock_guard<std::mutex> lock(clients_mutex);
-            clients[client_fd] = std::make_shared<ClientContext>();
+            clients[client_fd] = std::make_unique<MessageQueue>();
             LOG_DEBUG("Client %d added to epoll", client_fd);
         }
     }
@@ -156,41 +150,43 @@ void Server::handleClientEvent(epoll_event &event) {
 
 void Server::handleRead(int client_fd) {
     pool->enqueue([this, client_fd] {
-        std::shared_ptr<ClientContext> client;
-        {
-            std::lock_guard<std::mutex> lock(clients_mutex);
-            auto it = clients.find(client_fd);
-            if (it == clients.end() || !it->second->isActive()) {
-                LOG_DEBUG("Client %d not found or not active, skipping read handling", client_fd);
-                return;
-            }
-            client = it->second;
-        }
-
         std::vector<char> buffer(BUFFER_SIZE);
-        while (true) {
-            int read_len = read(client_fd, buffer.data(), buffer.size());
-            if (read_len < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK)
+        HttpParser parser;
+        bool keep_alive = true;
+
+        while (keep_alive) {
+            ssize_t bytes_read = read(client_fd, buffer.data(), buffer.size());
+            if (bytes_read < 0) {
+                if (errno == EAGAIN || errno == EWOULDBLOCK) {
                     break;
-                else {
+                } else {
                     LOG_ERROR("Read failed on socket %d: %s", client_fd, strerror(errno));
                     removeClient(client_fd);
-                    break;
+                    return;
                 }
-            } else if (read_len == 0) {
+            } else if (bytes_read == 0) {
                 LOG_INFO("Client disconnected: %d", client_fd);
                 removeClient(client_fd);
-                break;
-            } else {
-                auto request = client->parser.parse(std::string_view(buffer.data(), read_len));
-                if (request) {
-                    LOG_DEBUG("Received request from client %d: %s %s", client_fd, toString(request->method).data(), request->url.c_str());
-                    HttpResponse response = generateResponse(*request);
-                    client->pushResponse(response);
-                    client->setWriteReady(true);
-                    modifyEpollEvent(client_fd, EPOLLIN | EPOLLOUT);
+                return;
+            }
+
+           parser.parse(buffer.data(), bytes_read);
+            while(parser.hasCompletedRequest()) {
+                auto request = parser.getCompletedRequest();
+                auto response = generateResponse(*request);
+                {
+                    std::lock_guard<std::mutex> lock(clients_mutex);
+                    if (clients.find(client_fd) != clients.end()) {
+                        clients[client_fd]->pushResponse(std::move(response));
+                    }
                 }
+                // Check if we should keep the connection alive
+                auto connection_header = request->getHeader("Connection");
+                keep_alive = (connection_header == "keep-alive");
+            }
+            modifyEpollEvent(client_fd, EPOLLIN | EPOLLOUT);
+            if (!keep_alive) {
+                break;
             }
         }
     });
@@ -198,74 +194,49 @@ void Server::handleRead(int client_fd) {
 
 void Server::handleWrite(int client_fd) {
     pool->enqueue([this, client_fd] {
-        std::shared_ptr<ClientContext> client;
-        {
-            std::lock_guard<std::mutex> lock(clients_mutex);
-            auto it = clients.find(client_fd);
-            if (it == clients.end() || !it->second->isActive()) {
-                return;
-            }
-            client = it->second;
-        }
-
-        if (!client->isWriteReady() || !client->hasResponses()) return;
-
-        HttpResponse response = client->popResponse();
-        std::string headers = response.toString();
-
-        // 发送头部
-        if (send(client_fd, headers.c_str(), headers.length(), 0) < 0) {
-            LOG_ERROR("Failed to send headers to client %d: %s", client_fd, strerror(errno));
-            removeClient(client_fd);
+        std::unique_ptr<MessageQueue>& queue = clients[client_fd];
+        if (!queue) {
             return;
         }
 
-        // 发送主体
-        size_t total_sent = 0;
-        while (total_sent < response.body.size()) {
-            ssize_t sent = send(client_fd, response.body.data() + total_sent, response.body.size() - total_sent, 0);
-            if (sent < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                    // 资源暂时不可用，稍后重试
-                    continue;
-                } else {
-                    LOG_ERROR("Send error to client %d: %s", client_fd, strerror(errno));
-                    removeClient(client_fd);
-                    return;
+        while (queue->hasResponses()) {
+            HttpResponse response = queue->popResponse();
+            std::string response_str = response.toString();
+
+            size_t total_sent = 0;
+            while (total_sent < response_str.length()) {
+                ssize_t sent = send(client_fd, response_str.c_str() + total_sent, 
+                                    response_str.length() - total_sent, 0);
+                if (sent < 0) {
+                    if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                        // 资源暂时不可用，稍后重试
+                        continue;
+                    } else {
+                        LOG_ERROR("Send error to client %d: %s", client_fd, strerror(errno));
+                        removeClient(client_fd);
+                        return;
+                    }
                 }
+                total_sent += sent;
             }
-            total_sent += sent;
+
+            LOG_DEBUG("Sent response to client %d: %d bytes", client_fd, total_sent);
         }
 
-        LOG_DEBUG("Sent response to client %d: %d bytes", client_fd, total_sent);
-
-        if (!client->hasResponses()) {
-            client->setWriteReady(false);
-            modifyEpollEvent(client_fd, EPOLLIN);
-        }
+        modifyEpollEvent(client_fd, EPOLLIN);
     });
 }
 
 void Server::removeClient(int client_fd) {
-    std::shared_ptr<ClientContext> client;
-    {
-        std::lock_guard<std::mutex> lock(clients_mutex);
-        auto it = clients.find(client_fd);
-        if (it != clients.end()) {
-            client = it->second;
-            clients.erase(it);
-        }
-    }
+    std::lock_guard<std::mutex> lock(clients_mutex);
+    clients.erase(client_fd);
 
-    if (client) {
-        client->deactivate();
-        int epoll_ctl_result = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, nullptr);
-        if (epoll_ctl_result < 0) {
-            LOG_ERROR("Failed to remove client %d from epoll: %s", client_fd, strerror(errno));
-        }
-        close(client_fd);
-        LOG_INFO("Client %d removed", client_fd);
+    int epoll_ctl_result = epoll_ctl(epoll_fd, EPOLL_CTL_DEL, client_fd, nullptr);
+    if (epoll_ctl_result < 0) {
+        LOG_ERROR("Failed to remove client %d from epoll: %s", client_fd, strerror(errno));
     }
+    close(client_fd);
+    LOG_INFO("Client %d removed", client_fd);
 }
 
 void Server::modifyEpollEvent(int fd, uint32_t events) {
@@ -278,156 +249,18 @@ void Server::modifyEpollEvent(int fd, uint32_t events) {
 }
 
 HttpResponse Server::generateResponse(const HttpRequest &request) {
-    switch (request.method) {
-        case HttpMethod::GET:
-            return handleGetRequest(request);
-        case HttpMethod::HEAD:
-            return handleHeadRequest(request);
-        case HttpMethod::POST:
-            return handlePostRequest(request);
-        case HttpMethod::PUT:
-            return handlePutRequest(request);
-        case HttpMethod::DELETE:
-            return handleDeleteRequest(request);
-        case HttpMethod::OPTIONS:
-            return handleOptionsRequest(request);
-        default:
-            return createMethodNotAllowedResponse();
+    auto [route, params] = router.matchRoute(request);
+    if (route) {
+        return route->getHandler()(request, params);
     }
-}
-
-HttpResponse Server::serveStaticFile(const HttpRequest &request) {
-    std::filesystem::path filePath = publicDirectory + request.url;
-
-    if (std::filesystem::is_directory(filePath)) {
-        filePath /= "index.html";
-    }
-
-    if (std::filesystem::exists(filePath) && std::filesystem::is_regular_file(filePath)) {
-        std::ifstream file(filePath, std::ios::binary);
-        if (file) {
-            HttpResponse response;
-            response.status_code = 200;
-            response.status_message = "OK";
-
-            // 读取文件内容
-            file.seekg(0, std::ios::end);
-            size_t size = file.tellg();
-            file.seekg(0, std::ios::beg);
-            response.body.resize(size);
-            file.read(response.body.data(), size);
-
-            response.headers["Content-Type"] = getMimeType(filePath.string());
-            response.headers["Content-Length"] = std::to_string(response.body.size());
-            addCommonHeaders(response);
-            LOG_DEBUG("Serving static file: %s", filePath.string().c_str());
-            return response;
-        }
-    }
-    // 文件不存在，返回 404
-    LOG_WARN("File not found: %s", filePath.string().c_str());
-    return HttpResponseFactory::createNotFoundResponse();
-}
-
-std::string Server::getMimeType(const std::string &filename) {
-    size_t dotPos = filename.find_last_of('.');
-    if (dotPos != std::string::npos) {
-        std::string ext = filename.substr(dotPos);
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-        auto it = mimeTypes.find(ext);
-        if (it != mimeTypes.end()) {
-            return it->second;
-        }
-    }
-    return "application/octet-stream";  // 默认二进制流
-}
-
-HttpResponse Server::handleGetRequest(const HttpRequest &request) {
-    // 检查是否有注册的处理程序
-    auto methodHandlers = handlers.find(HttpMethod::GET);
-    if (methodHandlers != handlers.end()) {
-        auto handler = methodHandlers->second.find(request.url);
-        if (handler != methodHandlers->second.end()) {
-            LOG_DEBUG("Custom handler found for GET request: %s", request.url.c_str());
-            return handler->second(request);
-        }
-    }
-
-    // 如果没有注册的处理程序，则尝试提供静态文件
-    LOG_DEBUG("Serving static file for GET request: %s", request.url.c_str());
-    return serveStaticFile(request);
-}
-
-HttpResponse Server::handleHeadRequest(const HttpRequest &request) {
-    HttpResponse response = handleGetRequest(request);
-    response.body.clear();  // HEAD 请求不返回响应体
-    LOG_DEBUG("Handled HEAD request for: %s", request.url.c_str());
-    return response;
-}
-
-HttpResponse Server::handlePostRequest(const HttpRequest &request) {
-    auto methodHandlers = handlers.find(HttpMethod::POST);
-    if (methodHandlers != handlers.end()) {
-        auto handler = methodHandlers->second.find(request.url);
-        if (handler != methodHandlers->second.end()) {
-            LOG_DEBUG("Custom handler found for POST request: %s", request.url.c_str());
-            return handler->second(request);
-        }
-    }
-    LOG_WARN("No handler found for POST request: %s", request.url.c_str());
-    return createMethodNotAllowedResponse();
-}
-
-HttpResponse Server::handlePutRequest(const HttpRequest &request) {
-    auto methodHandlers = handlers.find(HttpMethod::PUT);
-    if (methodHandlers != handlers.end()) {
-        auto handler = methodHandlers->second.find(request.url);
-        if (handler != methodHandlers->second.end()) {
-            LOG_DEBUG("Custom handler found for PUT request: %s", request.url.c_str());
-            return handler->second(request);
-        }
-    }
-    LOG_WARN("No handler found for PUT request: %s", request.url.c_str());
-    return createMethodNotAllowedResponse();
-}
-
-HttpResponse Server::handleDeleteRequest(const HttpRequest &request) {
-    auto methodHandlers = handlers.find(HttpMethod::DELETE);
-    if (methodHandlers != handlers.end()) {
-        auto handler = methodHandlers->second.find(request.url);
-        if (handler != methodHandlers->second.end()) {
-            LOG_DEBUG("Custom handler found for DELETE request: %s", request.url.c_str());
-            return handler->second(request);
-        }
-    }
-    LOG_WARN("No handler found for DELETE request: %s", request.url.c_str());
-    return createMethodNotAllowedResponse();
-}
-
-HttpResponse Server::handleOptionsRequest(const HttpRequest & /* request */) {
-    HttpResponse response;
-    response.status_code = 200;
-    response.status_message = "OK";
-    response.headers["Allow"] = "GET, HEAD, POST, PUT, DELETE, OPTIONS";
-    addCommonHeaders(response);
-    LOG_DEBUG("Handled OPTIONS request");
-    return response;
-}
-
-HttpResponse Server::createMethodNotAllowedResponse() {
-    HttpResponse response;
-    response.status_code = 405;
-    response.status_message = "Method Not Allowed";
-    response.headers["Allow"] = "GET, HEAD, POST, PUT, DELETE, OPTIONS";
-    addCommonHeaders(response);
-    LOG_WARN("Returned 405 Method Not Allowed response");
-    return response;
+    // 如果没有匹配的路由，尝试提供静态文件
+    return staticFileController->serveFile(request, {});
 }
 
 void Server::addCommonHeaders(HttpResponse &response) {
-    response.headers["Server"] = "TinyWebServer/1.0";
-    response.headers["Date"] = getCurrentDate();
-    response.headers["Connection"] = "close";
+    response.setHeader("Server", "TinyWebServer/1.0");
+    response.setHeader("Date", getCurrentDate());
+    response.setHeader("Connection", "close");
 }
 
 std::string Server::getCurrentDate() const {
@@ -437,10 +270,4 @@ std::string Server::getCurrentDate() const {
     std::stringstream ss;
     ss << std::put_time(std::gmtime(&in_time_t), "%a, %d %b %Y %H:%M:%S GMT");
     return ss.str();
-}
-
-void Server::initializeMimeTypes() {
-    mimeTypes = {{".html", "text/html"},  {".css", "text/css"},   {".js", "application/javascript"}, {".json", "application/json"}, {".png", "image/png"},       {".jpg", "image/jpeg"}, {".jpeg", "image/jpeg"}, {".gif", "image/gif"}, {".svg", "image/svg+xml"}, {".ico", "image/x-icon"},
-                 {".webp", "image/webp"}, {".txt", "text/plain"}, {".pdf", "application/pdf"},       {".xml", "application/xml"},   {".zip", "application/zip"}, {".mp3", "audio/mpeg"}, {".mp4", "video/mp4"}};
-    LOG_INFO("MIME types initialized");
 }

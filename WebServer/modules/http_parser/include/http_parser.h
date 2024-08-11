@@ -1,67 +1,54 @@
-// modules/http_parser/include/http_parser.h
-
 #pragma once
 
-#include <functional>
-#include <optional>
+#include "http_request.h"
+#include <memory>
 #include <string>
-#include <string_view>
-#include <unordered_map>
-#include <vector>
+#include <queue>
 
-enum class HttpMethod { GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH, UNKNOWN };
-enum class HttpVersion { HTTP_1_0, HTTP_1_1, HTTP_2_0, UNKNOWN };
-
-struct HttpRequest {
-    HttpMethod method = HttpMethod::UNKNOWN;
-    std::string url;
-    HttpVersion version = HttpVersion::UNKNOWN;
-    std::unordered_map<std::string, std::string> headers;
-    std::vector<char> body;
-
-    HttpRequest();
-};
-
-class IHttpParser {
+class HttpParser {
 public:
-    using ErrorCallback = std::function<void(const std::string &)>;
+    struct ParseResult {
+        bool complete;
+        size_t bytes_processed;
+    };
 
-    virtual ~IHttpParser() = default;
-    virtual void reset() = 0;
-    virtual std::optional<HttpRequest> parse(std::string_view data) = 0;
-    virtual void setErrorCallback(ErrorCallback cb) = 0;
-};
-
-class HttpParser : public IHttpParser {
-public:
     HttpParser();
-    void reset() override;
-    std::optional<HttpRequest> parse(std::string_view data) override;
-    void setErrorCallback(ErrorCallback cb) override;
+    ~HttpParser() = default;
 
-    static std::unordered_map<std::string, std::string> parseQueryParams(const std::string &url);
+    // 禁用拷贝
+    HttpParser(const HttpParser&) = delete;
+    HttpParser& operator=(const HttpParser&) = delete;
+
+    // 允许移动
+    HttpParser(HttpParser&&) noexcept = default;
+    HttpParser& operator=(HttpParser&&) noexcept = default;
+
+    ParseResult parse(const char* data, size_t len);
+    bool hasCompletedRequest() const;
+    HttpRequestPtr getCompletedRequest();
 
 private:
-    enum class ParserState { METHOD, URL, VERSION, HEADER_NAME, HEADER_VALUE, BODY, COMPLETE, ERROR };
+    enum class State {
+        METHOD,
+        URL,
+        VERSION,
+        HEADER_KEY,
+        HEADER_VALUE,
+        BODY,
+        FINISHED
+    };
 
-    ParserState state;
-    HttpRequest request;
-    std::string currentHeaderName;
-    std::string currentHeaderValue;
-    size_t contentLength;
-    ErrorCallback errorCallback;
+    State state_;
+    std::unique_ptr<HttpRequest> current_request_;
+    std::queue<HttpRequestPtr> completed_requests_;
+    std::string current_header_key_;
+    size_t content_length_;
+    std::string buffer_;
 
-    bool parseChar(char c);
-    bool parseMethod(char c);
-    bool parseUrl(char c);
-    bool parseVersion(char c);
-    bool parseHeaderName(char c);
-    bool parseHeaderValue(char c);
-    bool parseBody(char c);
-    void processHeader();
-    static HttpMethod stringToMethod(std::string_view method);
-    static std::string trim(const std::string &s);
+    void resetParserState();
+    void parseUrl(const std::string& url);
+    void trim(std::string& s);
+    void finalizeCurrentRequest();
 };
 
-std::string_view toString(HttpMethod method);
-std::string_view toString(HttpVersion version);
+using HttpParserPtr = std::unique_ptr<HttpParser>;

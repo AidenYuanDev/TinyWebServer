@@ -16,7 +16,7 @@
 
 class ThreadPool {
 public:
-    ThreadPool();
+    ThreadPool(int thread_count);
     ThreadPool(const ThreadPool &) = delete;
     ThreadPool &operator=(const ThreadPool &) = delete;
     ~ThreadPool();
@@ -55,6 +55,7 @@ private:
     std::condition_variable condition;
     std::atomic<bool> stop;
     std::atomic<int> active_tasks;
+    int thread_count;
 
     void init_pool();
 };

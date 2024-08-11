@@ -1,209 +1,155 @@
-// modules/http_parser/src/http_parser.cpp
-
 #include "http_parser.h"
-#include <logger.h>
 #include <algorithm>
-#include <array>
 #include <cctype>
-#include <sstream>
 
-std::string_view toString(HttpMethod method) {
-    static constexpr std::array<std::string_view, 10> methodStrings = {
-        "GET", "POST", "PUT", "DELETE", "HEAD", "OPTIONS", "TRACE", "CONNECT", "PATCH", "UNKNOWN"
-    };
-    return methodStrings[static_cast<int>(method)];
-}
+HttpParser::HttpParser() 
+    : state_(State::METHOD), 
+      current_request_(std::make_unique<HttpRequest>()), 
+      content_length_(0) {}
 
-std::string_view toString(HttpVersion version) {
-    static constexpr std::array<std::string_view, 4> versionStrings = {
-        "HTTP/1.0", "HTTP/1.1", "HTTP/2.0", "UNKNOWN"
-    };
-    return versionStrings[static_cast<int>(version)];
-}
+HttpParser::ParseResult HttpParser::parse(const char* data, size_t len) {
+    buffer_.append(data, len);
+    size_t total_processed = 0;
 
-HttpRequest::HttpRequest() : method(HttpMethod::UNKNOWN), version(HttpVersion::UNKNOWN) {}
+    while (!buffer_.empty()) {
+        const char* start = buffer_.c_str();
+        const char* end = start + buffer_.length();
+        const char* current = start;
 
-HttpParser::HttpParser() {
-    reset();
-    LOG_DEBUG("HttpParser initialized");
-}
-
-void HttpParser::reset() {
-    state = ParserState::METHOD;
-    request = HttpRequest{};
-    currentHeaderName.clear();
-    currentHeaderValue.clear();
-    contentLength = 0;
-    LOG_DEBUG("HttpParser reset");
-}
-
-std::optional<HttpRequest> HttpParser::parse(std::string_view data) {
-    LOG_DEBUG("Parsing HTTP request, data length: %zu", data.length());
-    for (char c : data) {
-        if (!parseChar(c)) {
-            if (errorCallback) {
-                errorCallback("Parsing error");
+        while (current < end) {
+            switch (state_) {
+                case State::METHOD:
+                    if (*current == ' ') {
+                        auto result = string_to_method(std::string(start, current));
+                        if (auto method = std::get_if<HttpMethod>(&result)) {
+                            current_request_->setMethod(*method);
+                            state_ = State::URL;
+                            start = current + 1;
+                        } else {
+                            // Handle error
+                            return {false, total_processed};
+                        }
+                    }
+                    break;
+                case State::URL:
+                    if (*current == ' ') {
+                        parseUrl(std::string(start, current));
+                        state_ = State::VERSION;
+                        start = current + 1;
+                    }
+                    break;
+                case State::VERSION:
+                    if (*current == '\r') {
+                        auto result = string_to_version(std::string(start, current));
+                        if (auto version = std::get_if<HttpVersion>(&result)) {
+                            current_request_->setVersion(*version);
+                        } else {
+                            // Handle error
+                            return {false, total_processed};
+                        }
+                    } else if (*current == '\n') {
+                        state_ = State::HEADER_KEY;
+                        start = current + 1;
+                    }
+                    break;
+                case State::HEADER_KEY:
+                    if (*current == ':') {
+                        current_header_key_ = std::string(start, current);
+                        state_ = State::HEADER_VALUE;
+                        start = current + 1;
+                    } else if (*current == '\r') {
+                        // Empty line, end of headers
+                    } else if (*current == '\n') {
+                        if (current_request_->hasHeader("Content-Length")) {
+                            content_length_ = std::stoul(current_request_->getHeader("Content-Length"));
+                            state_ = State::BODY;
+                        } else {
+                            finalizeCurrentRequest();
+                        }
+                        start = current + 1;
+                    }
+                    break;
+                case State::HEADER_VALUE:
+                    if (*current == '\r') {
+                        std::string value(start, current);
+                        trim(value);
+                        current_request_->setHeader(current_header_key_, value);
+                    } else if (*current == '\n') {
+                        state_ = State::HEADER_KEY;
+                        start = current + 1;
+                    }
+                    break;
+                case State::BODY:
+                    {
+                        size_t remaining = content_length_ - current_request_->getBody().length();
+                        size_t to_read = std::min(remaining, static_cast<size_t>(end - current));
+                        current_request_->setBody(current_request_->getBody() + std::string(current, to_read));
+                        current += to_read - 1; // -1 because the loop will increment current
+                        if (current_request_->getBody().length() == content_length_) {
+                            finalizeCurrentRequest();
+                        }
+                    }
+                    break;
+                case State::FINISHED:
+                    // This should not happen, as we reset the state after finalizing a request
+                    break;
             }
-            LOG_ERROR("HTTP parsing error");
-            return std::nullopt;
+            ++current;
         }
-        if (state == ParserState::COMPLETE) {
-            LOG_INFO("HTTP request parsed successfully");
-            auto result = std::move(request);
-            reset();
-            return result;
+
+        size_t processed = current - start;
+        total_processed += processed;
+        buffer_ = buffer_.substr(processed);
+
+        if (state_ != State::FINISHED) {
+            // We need more data to complete the current request
+            break;
         }
     }
-    LOG_DEBUG("Partial HTTP request parsed, waiting for more data");
-    return std::nullopt;
+
+    return {!completed_requests_.empty(), total_processed};
 }
 
-void HttpParser::setErrorCallback(ErrorCallback cb) {
-    errorCallback = std::move(cb);
-    LOG_DEBUG("Error callback set for HttpParser");
+bool HttpParser::hasCompletedRequest() const {
+    return !completed_requests_.empty();
 }
 
-bool HttpParser::parseChar(char c) {
-    switch (state) {
-        case ParserState::METHOD: return parseMethod(c);
-        case ParserState::URL: return parseUrl(c);
-        case ParserState::VERSION: return parseVersion(c);
-        case ParserState::HEADER_NAME: return parseHeaderName(c);
-        case ParserState::HEADER_VALUE: return parseHeaderValue(c);
-        case ParserState::BODY: return parseBody(c);
-        default: return false;
+HttpRequestPtr HttpParser::getCompletedRequest() {
+    if (completed_requests_.empty()) {
+        return nullptr;
     }
+    auto request = std::move(completed_requests_.front());
+    completed_requests_.pop();
+    return request;
 }
 
-bool HttpParser::parseMethod(char c) {
-    if (c == ' ') {
-        request.method = stringToMethod(request.url);
-        request.url.clear();
-        state = ParserState::URL;
-        LOG_DEBUG("HTTP method parsed: %s", toString(request.method).data());
-    } else {
-        request.url += c;
-    }
-    return true;
+void HttpParser::resetParserState() {
+    state_ = State::METHOD;
+    current_request_ = std::make_unique<HttpRequest>();
+    current_header_key_.clear();
+    content_length_ = 0;
 }
 
-bool HttpParser::parseUrl(char c) {
-    if (c == ' ') {
-        state = ParserState::VERSION;
-        LOG_DEBUG("URL parsed: %s", request.url.c_str());
-    } else {
-        request.url += c;
-    }
-    return true;
-}
-
-bool HttpParser::parseVersion(char c) {
-    static const std::string_view httpVersion = "HTTP/";
-    static size_t versionIndex = 0;
-
-    if (versionIndex < httpVersion.length()) {
-        if (c == httpVersion[versionIndex]) {
-            ++versionIndex;
-        } else {
-            LOG_ERROR("Invalid HTTP version");
-            return false;
-        }
-    } else if (c == '1' || c == '2') {
-        request.version = (c == '1') ? HttpVersion::HTTP_1_1 : HttpVersion::HTTP_2_0;
-        versionIndex = 0;
-        state = ParserState::HEADER_NAME;
-        LOG_DEBUG("HTTP version parsed: %s", toString(request.version).data());
-    } else {
-        LOG_ERROR("Invalid HTTP version");
-        return false;
-    }
-    return true;
-}
-
-bool HttpParser::parseHeaderName(char c) {
-    if (c == ':') {
-        state = ParserState::HEADER_VALUE;
-    } else if (c == '\r') {
-        // Skip carriage return
-    } else if (c == '\n') {
-        if (!currentHeaderName.empty()) {
-            processHeader();
-        } else {
-            state = (contentLength > 0) ? ParserState::BODY : ParserState::COMPLETE;
-            if (state == ParserState::COMPLETE) {
-                LOG_DEBUG("Headers parsing completed");
-            }
-        }
-    } else {
-        currentHeaderName += std::tolower(c);
-    }
-    return true;
-}
-
-bool HttpParser::parseHeaderValue(char c) {
-    if (c == '\r') {
-        // Skip carriage return
-    } else if (c == '\n') {
-        processHeader();
-        state = ParserState::HEADER_NAME;
-    } else {
-        currentHeaderValue += c;
-    }
-    return true;
-}
-
-bool HttpParser::parseBody(char c) {
-    request.body.push_back(c);
-    if (request.body.size() == contentLength) {
-        state = ParserState::COMPLETE;
-        LOG_DEBUG("HTTP body parsed, length: %zu", contentLength);
-    }
-    return true;
-}
-
-void HttpParser::processHeader() {
-    if (currentHeaderName == "content-length") {
-        contentLength = std::stoul(currentHeaderValue);
-        LOG_DEBUG("Content-Length header processed: %zu", contentLength);
-    }
-    request.headers[currentHeaderName] = trim(currentHeaderValue);
-    LOG_DEBUG("Header processed: %s: %s", currentHeaderName.c_str(), currentHeaderValue.c_str());
-    currentHeaderName.clear();
-    currentHeaderValue.clear();
-}
-
-HttpMethod HttpParser::stringToMethod(std::string_view method) {
-    static const std::unordered_map<std::string_view, HttpMethod> methodMap = {
-        {"GET", HttpMethod::GET}, {"POST", HttpMethod::POST}, {"PUT", HttpMethod::PUT},
-        {"DELETE", HttpMethod::DELETE}, {"HEAD", HttpMethod::HEAD}, {"OPTIONS", HttpMethod::OPTIONS},
-        {"TRACE", HttpMethod::TRACE}, {"CONNECT", HttpMethod::CONNECT}, {"PATCH", HttpMethod::PATCH}
-    };
-    auto it = methodMap.find(method);
-    return (it != methodMap.end()) ? it->second : HttpMethod::UNKNOWN;
-}
-
-std::string HttpParser::trim(const std::string& s) {
-    auto start = std::find_if_not(s.begin(), s.end(), ::isspace);
-    auto end = std::find_if_not(s.rbegin(), s.rend(), ::isspace).base();
-    return (start < end) ? std::string(start, end) : std::string();
-}
-
-std::unordered_map<std::string, std::string> HttpParser::parseQueryParams(const std::string& url) {
-    std::unordered_map<std::string, std::string> params;
-    size_t pos = url.find('?');
+void HttpParser::parseUrl(const std::string& url) {
+    auto pos = url.find('?');
     if (pos != std::string::npos) {
-        std::string query = url.substr(pos + 1);
-        std::istringstream iss(query);
-        std::string pair;
-        while (std::getline(iss, pair, '&')) {
-            size_t eq_pos = pair.find('=');
-            if (eq_pos != std::string::npos) {
-                std::string key = pair.substr(0, eq_pos);
-                std::string value = pair.substr(eq_pos + 1);
-                params[key] = value;
-                LOG_DEBUG("Query param parsed: %s = %s", key.c_str(), value.c_str());
-            }
-        }
+        current_request_->setPath(url.substr(0, pos));
+        current_request_->setQuery(url.substr(pos + 1));
+    } else {
+        current_request_->setPath(url);
     }
-    return params;
+}
+
+void HttpParser::trim(std::string& s) {
+    s.erase(s.begin(), std::find_if(s.begin(), s.end(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }));
+    s.erase(std::find_if(s.rbegin(), s.rend(), [](unsigned char ch) {
+        return !std::isspace(ch);
+    }).base(), s.end());
+}
+
+void HttpParser::finalizeCurrentRequest() {
+    completed_requests_.push(std::move(current_request_));
+    resetParserState();
 }

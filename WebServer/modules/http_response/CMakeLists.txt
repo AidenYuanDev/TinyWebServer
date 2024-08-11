@@ -3,9 +3,9 @@ add_library(http_response STATIC)
 
 target_sources(http_response
     PRIVATE
-        ./src/http_response.cpp 
+        src/http_response.cpp
     PUBLIC
-        ./include/http_response.h
+        include/http_response.h
 )
 
 target_include_directories(http_response
@@ -18,7 +18,8 @@ target_include_directories(http_response
 
 target_link_libraries(http_response
     PRIVATE
-    logger
+    http_types
 )
+
 # 测试
 # add_subdirectory(test)

@@ -20,9 +20,14 @@ target_include_directories(server
 target_link_libraries(server
     PRIVATE
     thread_pool
-    client_context
+    message_queue 
     http_parser
+    http_types
+    http_request
     http_response
+    route
+    router
+    static_file_controller
     logger
     config_manager
     ${YAML_CPP_LIBRARIES}

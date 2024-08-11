@@ -3,9 +3,9 @@ add_library(http_parser STATIC)
 
 target_sources(http_parser
     PRIVATE
-        ./src/http_parser.cpp 
+        src/http_parser.cpp
     PUBLIC
-        ./include/http_parser.h
+        include/http_parser.h
 )
 
 target_include_directories(http_parser
@@ -14,16 +14,12 @@ target_include_directories(http_parser
         $<INSTALL_INTERFACE:include>
     PRIVATE
         ${CMAKE_CURRENT_SOURCE_DIR}/src
-        ${YAML_CPP_INCLUDE_DIRS}
 )
 
 target_link_libraries(http_parser
-PRIVATE
-    http_response
-    logger
-    config_manager
-    ${YAML_CPP_LIBRARIES} 
-
+    PRIVATE
+    http_types
+    http_request
 )
 
 # 测试

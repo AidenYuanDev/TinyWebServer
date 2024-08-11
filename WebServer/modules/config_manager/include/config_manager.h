@@ -23,3 +23,5 @@ private:
     YAML::Node config;
     std::string config_filename;
 };
+
+#define config() ConfigManager::getInstance() 

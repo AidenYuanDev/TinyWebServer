@@ -18,8 +18,8 @@ class Logger {
 public:
     static Logger& getInstance();
 
-    void setLogLevel(LogLevel level);
-    void setLogFile(const std::string& filename);
+    Logger& setLogLevel(LogLevel level);
+    Logger& setLogFile(const std::string& filename);
 
     template<typename... Args>
     void debug(const char* format, Args... args) {
@@ -75,6 +75,8 @@ private:
     std::ofstream logFile;
     std::mutex logMutex;
 };
+
+#define logger() Logger::getInstance()
 
 #define LOG_DEBUG(...) Logger::getInstance().debug(__VA_ARGS__)
 #define LOG_INFO(...)  Logger::getInstance().info(__VA_ARGS__)
