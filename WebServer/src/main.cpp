@@ -1,7 +1,7 @@
 // main.cpp
 #include "app.h"
 
-int main(int argc, char* argv[]) {
+int main() {
     try {
         app().loadConfigFile("server_config.yaml").run();
     } catch (const std::exception& e) {

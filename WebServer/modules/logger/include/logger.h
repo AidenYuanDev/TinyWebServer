@@ -1,10 +1,9 @@
-// modules/logger/include/logger.h
-
 #pragma once
 
 #include <string>
 #include <fstream>
 #include <mutex>
+#include <format>
 
 enum class LogLevel {
     DEBUG,
@@ -22,28 +21,28 @@ public:
     Logger& setLogFile(const std::string& filename);
 
     template<typename... Args>
-    void debug(const char* format, Args... args) {
-        log(LogLevel::DEBUG, format, args...);
+    void debug(std::format_string<Args...> fmt, Args&&... args) {
+        log(LogLevel::DEBUG, fmt, std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    void info(const char* format, Args... args) {
-        log(LogLevel::INFO, format, args...);
+    void info(std::format_string<Args...> fmt, Args&&... args) {
+        log(LogLevel::INFO, fmt, std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    void warning(const char* format, Args... args) {
-        log(LogLevel::WARNING, format, args...);
+    void warning(std::format_string<Args...> fmt, Args&&... args) {
+        log(LogLevel::WARNING, fmt, std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    void error(const char* format, Args... args) {
-        log(LogLevel::ERROR, format, args...);
+    void error(std::format_string<Args...> fmt, Args&&... args) {
+        log(LogLevel::ERROR, fmt, std::forward<Args>(args)...);
     }
 
     template<typename... Args>
-    void fatal(const char* format, Args... args) {
-        log(LogLevel::FATAL, format, args...);
+    void fatal(std::format_string<Args...> fmt, Args&&... args) {
+        log(LogLevel::FATAL, fmt, std::forward<Args>(args)...);
     }
 
 private:
@@ -53,18 +52,11 @@ private:
     Logger& operator=(const Logger&) = delete;
 
     template<typename... Args>
-    void log(LogLevel level, const char* format, Args... args) {
+    void log(LogLevel level, std::format_string<Args...> fmt, Args&&... args) {
         if (level >= currentLevel) {
-            std::string message = formatMessage(format, args...);
+            std::string message = std::format(fmt, std::forward<Args>(args)...);
             writeLog(level, message);
         }
-    }
-
-    template<typename... Args>
-    std::string formatMessage(const char* format, Args... args) {
-        char buffer[1024];
-        snprintf(buffer, sizeof(buffer), format, args...);
-        return std::string(buffer);
     }
 
     void writeLog(LogLevel level, const std::string& message);
