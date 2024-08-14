@@ -55,7 +55,7 @@
 
 ### 2.2测试结果(线程池大小16) —— 47并发 293QPS
 
-![服务器测试结果](/home/aiden/Development/TinyWebServer/image/服务器测试结果.png)
+![服务器测试结果](。/image/服务器测试结果.png)
 
 
 
